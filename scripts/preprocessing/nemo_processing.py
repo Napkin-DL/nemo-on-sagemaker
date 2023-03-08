@@ -64,8 +64,8 @@ def write_processed_manifest(data, original_path):
     new_manifest_name = original_manifest_name.replace(".json", "_processed.json")
 
     manifest_dir = BASE_OUTPUT_DIR + '/cleaned'
-    if not os.path.exists(directory):
-        os.makedirs(manifest_dir, exists_ok=True)
+    if not os.path.exists(manifest_dir):
+        os.makedirs(manifest_dir, exist_ok=True)
         
     filepath = os.path.join(manifest_dir, new_manifest_name)
     with open(filepath, 'w') as f:
