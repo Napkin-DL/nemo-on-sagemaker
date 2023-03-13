@@ -140,11 +140,11 @@ model:
 trainer:
   devices: -1
   num_nodes: 1
-  max_epochs: 5
+  max_epochs: 150
   max_steps: -1
   val_check_interval: 1.0
   accelerator: gpu
-  strategy: ddp
+  strategy: smddp
   accumulate_grad_batches: 1
   gradient_clip_val: 0.0
   precision: 32

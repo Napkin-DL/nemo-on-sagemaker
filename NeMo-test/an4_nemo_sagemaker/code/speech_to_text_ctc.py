@@ -1,4 +1,4 @@
-from nemo.utils.cloud import initialize_sagemaker; initialize_sagemaker()
+
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -69,6 +69,11 @@ https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/results.ht
 
 """
 
+import os
+
+# print(f"os.environ: {os.environ}")
+
+from nemo.utils.cloud import initialize_sagemaker; initialize_sagemaker()
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
 
@@ -78,10 +83,12 @@ from nemo.utils import logging
 from nemo.utils.exp_manager import exp_manager
 
 
+
+
 @hydra_runner(config_path="../conf", config_name="config")
 def main(cfg):
     logging.info(f'Hydra config: {OmegaConf.to_yaml(cfg)}')
-
+    print(f"cfg.trainer : {cfg.trainer}")
     trainer = pl.Trainer(**cfg.trainer)
     exp_manager(trainer, cfg.get("exp_manager", None))
     asr_model = EncDecCTCModel(cfg=cfg.model, trainer=trainer)
