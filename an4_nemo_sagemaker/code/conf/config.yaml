@@ -139,7 +139,7 @@ model:
   n_heads: 4
 trainer:
   devices: -1
-  num_nodes: 1
+  num_nodes: 2
   max_epochs: 150
   max_steps: -1
   val_check_interval: 1.0

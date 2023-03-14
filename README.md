@@ -1,1 +1,0 @@
-# nemo-on-sagemaker
