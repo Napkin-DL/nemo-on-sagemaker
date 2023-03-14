@@ -127,8 +127,8 @@ def main():
     for test_batch in asr_model.test_dataloader():
         test_batch = [x.cuda() for x in test_batch]
         targets = test_batch[2]
-        targets_lengths = test_batch[3]    
-
+        targets_lengths = test_batch[3]
+        
         log_probs, encoded_len, greedy_predictions = asr_model(
             input_signal=test_batch[0], input_signal_length=test_batch[1]
         )
