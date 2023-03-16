@@ -166,7 +166,7 @@ def main():
         }
     }
     
-    output_dir = "/opt/ml/processing/output/evaluation"
+    output_dir = "/opt/ml/processing/evaluation"
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     logger.info("Writing out evaluation report with wer: %f", wer_result)
