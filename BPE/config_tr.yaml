@@ -1,0 +1,148 @@
+name: Conformer-CTC-BPE
+model:
+  sample_rate: 16000
+  log_prediction: true
+  ctc_reduction: mean_batch
+  skip_nan_grad: false
+  train_ds:
+    manifest_filepath: /opt/ml/input/data/training/train_tarred_1bk/tarred_audio_manifest.json
+    sample_rate: ${model.sample_rate}
+    batch_size: 8
+    shuffle: true
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+    trim_silence: false
+    max_duration: 16.7
+    min_duration: 0.1
+    is_tarred: true
+    tarred_audio_filepaths: /opt/ml/input/data/training/train_tarred_1bk/audio__OP_0..511_CL_.tar
+    shuffle_n: 2048
+    bucketing_strategy: synced_randomized
+    bucketing_batch_size: null
+  validation_ds:
+    manifest_filepath: /opt/ml/input/data/testing/mozilla-foundation/test_mozilla-foundation_common_voice_11_0_manifest.json.clean.mount
+    sample_rate: ${model.sample_rate}
+    batch_size: 16
+    shuffle: false
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+  test_ds:
+    manifest_filepath: null
+    sample_rate: ${model.sample_rate}
+    batch_size: 16
+    shuffle: false
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+  tokenizer:
+    dir: /opt/ml/input/data/training/tokenizers/tokenizer_spe_bpe_v128
+    type: bpe
+  preprocessor:
+    _target_: nemo.collections.asr.modules.AudioToMelSpectrogramPreprocessor
+    sample_rate: ${model.sample_rate}
+    normalize: per_feature
+    window_size: 0.025
+    window_stride: 0.01
+    window: hann
+    features: 80
+    n_fft: 512
+    log: true
+    frame_splicing: 1
+    dither: 1.0e-05
+    pad_to: 0
+    pad_value: 0.0
+  spec_augment:
+    _target_: nemo.collections.asr.modules.SpectrogramAugmentation
+    freq_masks: 2
+    time_masks: 10
+    freq_width: 27
+    time_width: 0.05
+  encoder:
+    _target_: nemo.collections.asr.modules.ConformerEncoder
+    feat_in: ${model.preprocessor.features}
+    feat_out: -1
+    n_layers: 18
+    d_model: 512
+    subsampling: striding
+    subsampling_factor: 4
+    subsampling_conv_channels: -1
+    causal_downsampling: false
+    ff_expansion_factor: 4
+    self_attention_model: rel_pos
+    n_heads: 8
+    att_context_size:
+    - -1
+    - -1
+    att_context_style: regular
+    xscaling: true
+    untie_biases: true
+    pos_emb_max_len: 5000
+    conv_kernel_size: 31
+    conv_norm_type: batch_norm
+    conv_context_size: null
+    dropout: 0.1
+    dropout_pre_encoder: 0.1
+    dropout_emb: 0.0
+    dropout_att: 0.1
+    stochastic_depth_drop_prob: 0.0
+    stochastic_depth_mode: linear
+    stochastic_depth_start_layer: 1
+  decoder:
+    _target_: nemo.collections.asr.modules.ConvASRDecoder
+    feat_in: null
+    num_classes: -1
+    vocabulary: []
+  interctc:
+    loss_weights: []
+    apply_at_layers: []
+  optim:
+    name: adamw
+    lr: 0.001
+    betas:
+    - 0.9
+    - 0.98
+    weight_decay: 0.001
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 10000
+      warmup_ratio: null
+      min_lr: 1.0e-06
+trainer:
+  devices: -1
+  num_nodes: 1
+  max_epochs: 300
+  max_steps: -1
+  val_check_interval: 1.0
+  accelerator: gpu
+  strategy: ddp
+  accumulate_grad_batches: 128
+  gradient_clip_val: 0.0
+  precision: 16
+  log_every_n_steps: 10
+  enable_progress_bar: true
+  resume_from_checkpoint: null
+  num_sanity_val_steps: 0
+  check_val_every_n_epoch: 1
+  sync_batchnorm: true
+  enable_checkpointing: false
+  logger: false
+  benchmark: false
+exp_manager:
+  exp_dir: /opt/ml/model/
+  name: ${name}
+  create_tensorboard_logger: true
+  create_checkpoint_callback: true
+  checkpoint_callback_params:
+    monitor: val_wer
+    mode: min
+    save_top_k: 5
+    always_save_nemo: true
+  resume_if_exists: true
+  resume_ignore_no_checkpoint: true
+  create_wandb_logger: false
+  wandb_logger_kwargs:
+    name: null
+    project: null
+init_from_nemo_model: ssl_en_conformer_large.nemo
