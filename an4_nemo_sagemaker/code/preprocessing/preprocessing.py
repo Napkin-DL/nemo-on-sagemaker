@@ -104,7 +104,7 @@ class preprocess():
         self._make_manifest(
             data_dir=self.input_dir,
             train_mount_dir=self.args.train_mount_dir,
-            test_mount_dir=self.args.train_mount_dir
+            test_mount_dir=self.args.test_mount_dir
         )
         
         self._delete_sph(

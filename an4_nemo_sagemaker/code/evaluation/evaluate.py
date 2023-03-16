@@ -17,7 +17,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
-MANIFEST_PATH = os.environ['MANIFEST_PATH']
+TEST_MANIFEST_PATH = os.environ['TEST_MANIFEST_PATH']
 WAV_PATH = os.environ['WAV_PATH']
 
 
@@ -65,7 +65,7 @@ def apply_preprocessors(manifest, preprocessors):
 
 
 def change_dir(data):
-    data['audio_filepath'] = data['audio_filepath'].replace(MANIFEST_PATH, WAV_PATH)
+    data['audio_filepath'] = data['audio_filepath'].replace(TEST_MANIFEST_PATH, WAV_PATH)
     return data
 
 
@@ -94,6 +94,8 @@ def main():
     model_dir = 'trained_model'
     with tarfile.open(model_path) as tar:
         tar.extractall(path=model_dir)
+        
+    
     
     logger.debug("Loading nemo model.")
     checkpoint_path = find_checkpoint(model_dir)
@@ -125,7 +127,7 @@ def main():
     predicted_list = []
     
     for test_batch in asr_model.test_dataloader():
-        test_batch = [x.cuda() for x in test_batch]
+        test_batch = [x.to(device) for x in test_batch]
         targets = test_batch[2]
         targets_lengths = test_batch[3]
         
@@ -164,14 +166,16 @@ def main():
         }
     }
     
-    output_dir = "/opt/ml/processing/evaluation"
+    output_dir = "/opt/ml/processing/output/evaluation"
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     logger.info("Writing out evaluation report with wer: %f", wer_result)
     evaluation_path = f"{output_dir}/evaluation.json"
+    print ("evaluation_path", evaluation_path)
     with open(evaluation_path, "w") as f:
         f.write(json.dumps(report_dict))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":    
+        
     main()
