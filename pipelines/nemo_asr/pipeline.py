@@ -47,6 +47,7 @@ from sagemaker.workflow.model_step import ModelStep
 from sagemaker.model import Model
 from sagemaker.workflow.pipeline_context import PipelineSession
 
+from pipelines.nemo_asr.config.config import config_handler
 from utils.ssm import parameter_store
 from sagemaker.pytorch.estimator import PyTorch
 from sagemaker.workflow.functions import Join
@@ -56,6 +57,7 @@ from time import strftime
 from smexperiments.trial import Trial
 from smexperiments.experiment import Experiment
 from sagemaker.workflow.retry import StepRetryPolicy, StepExceptionTypeEnum, SageMakerJobExceptionTypeEnum, SageMakerJobStepRetryPolicy
+from sagemaker.workflow.step_collections import RegisterModel
 
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -129,36 +131,40 @@ def get_pipeline_custom_tags(new_tags, region, sagemaker_project_arn=None):
         print(f"Error getting project tags: {e}")
     return new_tags
 
-
-
 class sm_pipeline():
     
     def __init__(self, region, sagemaker_project_arn, role, default_bucket, \
-                 model_package_group_name, pipeline_name, base_job_prefix, \
-                 processing_instance_type, training_instance_type, input_data_path):
+                 model_package_group_name, base_job_prefix, \
+                 input_data_path):
+        
+        self.pipeline_config = config_handler(strConfigPath="config-pipeline.ini")
+        
         
         self.region=region
         self.default_bucket = default_bucket
         self.base_job_prefix = base_job_prefix
+        self.model_package_group_name = model_package_group_name
         self.pm = parameter_store(self.region)
         if role is None: self.role = sagemaker.session.get_execution_role(sagemaker_session)
         else: self.role=role
         
         self.sagemaker_session = get_session(self.region, default_bucket)
         self.pipeline_session = get_pipeline_session(region, default_bucket)
-        self.pipeline_name = pipeline_name
+        self.pipeline_name = self.pipeline_config.get_value("PIPELINE", "name") #pipeline_name        
         self.cache_config = CacheConfig(
-            enable_caching=False,
-            expire_after="T48H"
-        )
-        self.processing_instance_type = processing_instance_type
-        self.processing_instance_count = 1 #ParameterInteger(name="ProcessingInstanceCount", default_value=1)
-        self.training_instance_type = training_instance_type
-        self.training_instance_count = 1
-        self.model_approval_status = ParameterString(
-            name="ModelApprovalStatus",
-            default_value="PendingManualApproval"
-        )
+            enable_caching=self.pipeline_config.get_value("PIPELINE", "enable_caching", dtype="boolean"),
+            expire_after=self.pipeline_config.get_value("PIPELINE", "expire_after")
+        )    
+        
+        self.pipeline_config.set_value("PREPROCESSING", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
+        self.pipeline_config.set_value("TRAINING", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
+        self.pipeline_config.set_value("EVALUATION", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
+        
+        self.model_approval_status ="PendingManualApproval"
+        # self.model_approval_status = ParameterString(
+        #     name="ModelApprovalStatus",
+        #     default_value="PendingManualApproval"
+        # )
         
         self.proc_prefix = "/opt/ml/processing"        
         self.input_data_path = input_data_path
@@ -186,9 +192,9 @@ class sm_pipeline():
         dataset_processor = FrameworkProcessor(
             estimator_cls=PyTorch,
             framework_version=None,
-            image_uri=self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])),
-            instance_type=self.processing_instance_type,
-            instance_count=self.processing_instance_count,
+            image_uri=self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
+            instance_type=self.pipeline_config.get_value("PREPROCESSING", "instance_type"), #self.processing_instance_type,
+            instance_count=self.pipeline_config.get_value("PREPROCESSING", "instance_count"), #self.processing_instance_count,
             role=self.role,
             base_job_name=f"{self.base_job_prefix}/preprocessing", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
             sagemaker_session=self.pipeline_session
@@ -231,6 +237,15 @@ class sm_pipeline():
             name="PreprocessingProcess", ## Processing job이름
             step_args=step_args,
             cache_config=self.cache_config,
+            retry_policies=[                
+                # retry when resource limit quota gets exceeded
+                SageMakerJobStepRetryPolicy(
+                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
+                    expire_after_mins=180,
+                    interval_seconds=600,
+                    backoff_rate=1.0
+                ),
+            ]
         )
         
         print ("  \n== Preprocessing Step ==")
@@ -241,9 +256,9 @@ class sm_pipeline():
         dataset_processor = FrameworkProcessor(
             estimator_cls=PyTorch,
             framework_version=None,
-            image_uri=self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])),
-            instance_type=self.processing_instance_type,
-            instance_count=self.processing_instance_count,
+            image_uri=self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
+            instance_type=self.pipeline_config.get_value("PREPROCESSING", "instance_type"),
+            instance_count=self.pipeline_config.get_value("PREPROCESSING", "instance_count"), 
             role=self.role,
             base_job_name=f"{self.base_job_prefix}/preprocessing-2", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
             sagemaker_session=self.pipeline_session
@@ -286,22 +301,29 @@ class sm_pipeline():
             name="PreprocessingProcess-2", ## Processing job이름
             step_args=step_args,
             cache_config=self.cache_config,
+            retry_policies=[                
+                # retry when resource limit quota gets exceeded
+                SageMakerJobStepRetryPolicy(
+                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
+                    expire_after_mins=180,
+                    interval_seconds=600,
+                    backoff_rate=1.0
+                ),
+            ]
         )
         
         print ("  \n== Preprocessing Step 2 ==")
         print ("   \nArgs: ", self.preprocessing_process_2.arguments.items())
     
-    
-
     def _step_training(self, ):
         
         self.estimator = PyTorch(
             entry_point="speech_to_text_ctc.py", # the script we want to run
             source_dir="./an4_nemo_sagemaker/code/training/", # where our conf/script is
             role=self.role,
-            instance_type=self.training_instance_type,
-            instance_count=self.training_instance_count,
-            image_uri=self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])),
+            instance_type=self.pipeline_config.get_value("TRAINING", "instance_type"),
+            instance_count=self.pipeline_config.get_value("TRAINING", "instance_count"), 
+            image_uri=self.pipeline_config.get_value("TRAINING", "image_uri"),
             volume_size=1024,
             output_path=Join(
                 on="/",
@@ -369,21 +391,162 @@ class sm_pipeline():
         print ("  \n== Training Step ==")
         print ("   \nArgs: ", self.training_process.arguments.items())
         
+    def _step_evaluation(self, ):
+        
+        eval_processor = FrameworkProcessor(
+            estimator_cls=PyTorch,
+            framework_version=None,
+            role=self.role, 
+            image_uri=self.pipeline_config.get_value("EVALUATION", "image_uri"),
+            instance_type=self.pipeline_config.get_value("EVALUATION", "instance_type"),
+            instance_count=self.pipeline_config.get_value("EVALUATION", "instance_count"),
+            env={
+                'TEST_MANIFEST_PATH': '/opt/ml/input/data/testing/an4/wav', 
+                'WAV_PATH' : '/opt/ml/processing/input/wav'
+            },
+            sagemaker_session=self.pipeline_session,
+            base_job_name=f"{self.base_job_prefix}/evaluation", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
+        )
+        
+        sm_experiment = self.create_experiment(self.experiment_name)
+        job_name = self.create_trial(self.experiment_name)
+        
+        self.evaluation_report = PropertyFile(
+            name="EvaluationReport",
+            output_name="evaluation-metrics",
+            path="evaluation.json", ## evaluate.py 에서 write하는 부분
+        )
+        
+        step_args = eval_processor.run(
+            code="evaluate.py",
+            source_dir="./an4_nemo_sagemaker/code/evaluation/",
+            inputs=[
+                ProcessingInput(
+                    source=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
+                    input_name="model_artifact",
+                    destination=os.path.join(self.proc_prefix, "model")#  "/opt/ml/processing/model"
+                ),
+                ProcessingInput(
+                    source=Join(
+                        on="/",
+                        values=[
+                            self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
+                            "an4",
+                            "test_manifest.json",
+                        ],
+                    ),
+                    input_name="test_manifest_file",
+                    destination=os.path.join(self.proc_prefix, "input", "manifest") #"/opt/ml/processing/input/manifest"
+                ),
+                ProcessingInput(
+                    source=Join(
+                        on="/",
+                        values=[
+                            self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
+                            "an4",
+                            "wav",
+                        ],
+                    ),
+                    input_name="wav_dataset",
+                    destination=os.path.join(self.proc_prefix, "input", "wav") #"/opt/ml/processing/input/wav"
+                ),
+            ],
+            outputs=[
+                ProcessingOutput(
+                    output_name="evaluation-metrics",
+                    source=os.path.join(self.proc_prefix, "evaluation"), #"/opt/ml/processing/evaluation",
+                    destination=os.path.join(
+                        "s3://",
+                        self.pm.get_params(key=self.base_job_prefix + 'BUCKET'),
+                        self.pipeline_name,
+                        "evaluation",
+                        "output",
+                        "evaluation-metrics"
+                    ),
+                ),
+            ],
+            job_name=job_name,
+            experiment_config={
+              'TrialName': job_name,
+              'TrialComponentDisplayName': job_name,
+            },
+        )
+        
+        self.evaluation_process = ProcessingStep(
+            name="EvaluationProcess", ## Processing job이름
+            step_args=step_args,
+            depends_on=[self.training_process],
+            property_files=[self.evaluation_report],
+            cache_config=self.cache_config,
+            retry_policies=[                
+                # retry when resource limit quota gets exceeded
+                SageMakerJobStepRetryPolicy(
+                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
+                    expire_after_mins=180,
+                    interval_seconds=600,
+                    backoff_rate=1.0
+                ),
+            ]
+        )
+        
+        print ("  \n== Evaluation Step ==")
+        print ("   \nArgs: ", self.evaluation_process.arguments.items())
+        
+    def _step_model_registration(self, ):
+      
+        #self.model_package_group_name = ''.join([self.prefix, self.model_name])
+        self.pm.put_params(key=self.base_job_prefix + "MODEL-GROUP-NAME", value=self.model_package_group_name, overwrite=True)
+                                                                              
+        model_metrics = ModelMetrics(
+            model_statistics=MetricsSource(
+                s3_uri=Join(
+                    on="/",
+                    values=[
+                        self.evaluation_process.properties.ProcessingOutputConfig.Outputs["evaluation-metrics"].S3Output.S3Uri,
+                        #print (self.evaluation_process.arguments.items())로 확인가능
+                        "evaluation-metrics.json"
+                    ],
+                ),
+                content_type="application/json")
+        )
+                                       
+        self.register_process = RegisterModel(
+            name="ModelRegisterProcess", ## Processing job이름
+            estimator=self.estimator,
+            image_uri=self.training_process.properties.AlgorithmSpecification.TrainingImage, 
+            model_data=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
+            content_types=["text/csv"],
+            response_types=["text/csv"],
+            inference_instances=self.pipeline_config.get_value("MODEL_REGISTER", "inference_instances", dtype="list"),
+            transform_instances=self.pipeline_config.get_value("MODEL_REGISTER", "transform_instances", dtype="list"),
+            model_package_group_name=self.model_package_group_name,
+            approval_status=self.pipeline_config.get_value("MODEL_REGISTER", "model_approval_status_default"),
+            ## “Approved”, “Rejected”, or “PendingManualApproval” (default: “PendingManualApproval”).
+            model_metrics=model_metrics,
+            depends_on=[self.evaluation_process]
+        )
+        
+        print ("  \n== Registration Step ==")
 
     def _execution_steps(self, ):
         
         self._step_preprocessing()
         self._step_preprocessing_2()
         self._step_training()
+        self._step_evaluation()
+        self._step_model_registration()
         
-    
     def get_pipeline(self, ):
         
         self._execution_steps()
         
         pipeline = Pipeline(
             name=self.pipeline_name,
-            steps=[self.preprocessing_process, self.preprocessing_process_2, self.training_process],
+            steps=[self.preprocessing_process, self.preprocessing_process_2, \
+                   self.training_process, \
+                   self.evaluation_process, \
+                   self.register_process, \
+            ],
             sagemaker_session=self.pipeline_session
         )
 
@@ -406,10 +569,7 @@ def get_pipeline(
     role=None,
     default_bucket=None,
     model_package_group_name="AbalonePackageGroup",
-    pipeline_name="AbalonePipeline",
     base_job_prefix="Abalone",
-    processing_instance_type="ml.m5.xlarge",
-    training_instance_type="ml.m5.xlarge",
 ):
     """Gets a SageMaker ML Pipeline instance working with on abalone data.
 
@@ -603,10 +763,7 @@ def get_pipeline(
         role=role,
         default_bucket=default_bucket,
         model_package_group_name=model_package_group_name,
-        pipeline_name=pipeline_name,
         base_job_prefix=base_job_prefix,
-        processing_instance_type=processing_instance_type,
-        training_instance_type=training_instance_type,
         input_data_path=input_data_path)
     
     return nemo_asr_pipeline.get_pipeline()

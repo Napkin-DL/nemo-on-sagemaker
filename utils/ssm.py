@@ -7,9 +7,10 @@ class parameter_store():
         
         self.ssm = boto3.client('ssm', region_name=region_name)
         
-    def put_params(self, key, value, dtype="String", overwrite=False) -> str:
+    def put_params(self, key, value, dtype="String", overwrite=False, enc=False) -> str:
         
         #aws ssm put-parameter --name "RDS-MASTER-PASSWORD" --value 'PASSWORD' --type "SecureString"
+        if enc: dtype="SecureString"
         if overwrite:
             strQuery = ''.join(['aws ssm put-parameter', ' --name ', '"', str(key), '"', ' --value ', '"', str(value), '"', ' --type ', '"', str(dtype), '"', ' --overwrite'])
         strResponse = os.popen(strQuery).read()
@@ -17,11 +18,13 @@ class parameter_store():
         if strResponse != '': return 'Store suceess'
         else: return 'Error'
     
-    def get_params(self, key):
+    def get_params(self, key, enc=False):
         
+        if enc: WithDecryption = True
+        else: WithDecryption = True
         response = self.ssm.get_parameters(
             Names=[key,],
-            WithDecryption=False
+            WithDecryption=WithDecryption
         )
         
         return response['Parameters'][0]['Value']

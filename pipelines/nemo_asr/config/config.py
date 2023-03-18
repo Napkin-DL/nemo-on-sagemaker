@@ -11,10 +11,11 @@ class config_handler():
     def __init__(self, strConfigPath="config.ini"):
         
         strFilePath = path.dirname(path.abspath(__file__)) # current directory
+        print ("strFilePath", strFilePath)
         self.parser = ConfigParser(interpolation=ExtendedInterpolation())
         self.parser.read(os.path.join(strFilePath, strConfigPath))
         self.get_all_info()
-      
+        
     def get_all_info(self, ):
         
         print ("====== config info. ======")
