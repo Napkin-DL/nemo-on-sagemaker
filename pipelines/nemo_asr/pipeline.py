@@ -63,18 +63,10 @@ from sagemaker.workflow.step_collections import RegisterModel
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def get_sagemaker_client(region):
-     """Gets the sagemaker client.
-
-        Args:
-            region: the aws region to start the session
-            default_bucket: the bucket to use for storing the artifacts
-
-        Returns:
-            `sagemaker.session.Session instance
-        """
-     boto_session = boto3.Session(region_name=region)
-     sagemaker_client = boto_session.client("sagemaker")
-     return sagemaker_client
+    
+    boto_session = boto3.Session(region_name=region)
+    sagemaker_client = boto_session.client("sagemaker")
+    return sagemaker_client
 
 
 def get_session(region, default_bucket):
@@ -194,7 +186,7 @@ class sm_pipeline():
             framework_version=None,
             image_uri=self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
             instance_type=self.pipeline_config.get_value("PREPROCESSING", "instance_type"), #self.processing_instance_type,
-            instance_count=self.pipeline_config.get_value("PREPROCESSING", "instance_count"), #self.processing_instance_count,
+            instance_count=self.pipeline_config.get_value("PREPROCESSING", "instance_count", dtype="int"), #self.processing_instance_count,
             role=self.role,
             base_job_name=f"{self.base_job_prefix}/preprocessing", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
             sagemaker_session=self.pipeline_session
@@ -258,7 +250,7 @@ class sm_pipeline():
             framework_version=None,
             image_uri=self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
             instance_type=self.pipeline_config.get_value("PREPROCESSING", "instance_type"),
-            instance_count=self.pipeline_config.get_value("PREPROCESSING", "instance_count"), 
+            instance_count=self.pipeline_config.get_value("PREPROCESSING", "instance_count", dtype="int"), 
             role=self.role,
             base_job_name=f"{self.base_job_prefix}/preprocessing-2", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
             sagemaker_session=self.pipeline_session
@@ -322,7 +314,7 @@ class sm_pipeline():
             source_dir="./an4_nemo_sagemaker/code/training/", # where our conf/script is
             role=self.role,
             instance_type=self.pipeline_config.get_value("TRAINING", "instance_type"),
-            instance_count=self.pipeline_config.get_value("TRAINING", "instance_count"), 
+            instance_count=self.pipeline_config.get_value("TRAINING", "instance_count", dtype="int"), 
             image_uri=self.pipeline_config.get_value("TRAINING", "image_uri"),
             volume_size=1024,
             output_path=Join(
@@ -399,7 +391,7 @@ class sm_pipeline():
             role=self.role, 
             image_uri=self.pipeline_config.get_value("EVALUATION", "image_uri"),
             instance_type=self.pipeline_config.get_value("EVALUATION", "instance_type"),
-            instance_count=self.pipeline_config.get_value("EVALUATION", "instance_count"),
+            instance_count=self.pipeline_config.get_value("EVALUATION", "instance_count", dtype="int"),
             env={
                 'TEST_MANIFEST_PATH': '/opt/ml/input/data/testing/an4/wav', 
                 'WAV_PATH' : '/opt/ml/processing/input/wav'
@@ -413,7 +405,7 @@ class sm_pipeline():
         
         self.evaluation_report = PropertyFile(
             name="EvaluationReport",
-            output_name="evaluation-metrics",
+            output_name="evaluation-metrics", ## evaluation의 ProcessingOutput의 output_name
             path="evaluation.json", ## evaluate.py 에서 write하는 부분
         )
         

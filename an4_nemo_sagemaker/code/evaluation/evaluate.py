@@ -155,7 +155,8 @@ def main():
     report_dict = {
         "metrics": {
             "wer": {
-                "value": wer_result
+                "value": wer_result,
+                "standard_deviation": "NaN",
             },
         },
         "reference": {
@@ -165,6 +166,16 @@ def main():
             "value": predicted_list
         }
     }
+    
+    # report_dict = {
+    #     "performance_metrics": {
+    #         "accuracy": {"value": fAcc, "standard_deviation": "NaN",},
+    #         "auc": {"value": fAuc, "standard_deviation": "NaN"},
+    #         "prec": {"value": fPrec, "standard_deviation": "NaN"},
+    #         "rec": {"value": fRec, "standard_deviation": "NaN"},
+    #         "fscore": {"value": fScore, "standard_deviation": "NaN"},
+    #     },
+    # }
     
     output_dir = "/opt/ml/processing/evaluation"
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
