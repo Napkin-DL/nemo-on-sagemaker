@@ -272,7 +272,7 @@ def main():
         
         if tolerance is not None:
             if metric_value > tolerance:
-                raise ValueError(f"Got {metric_name} of {metric_value}, which was higher than tolerance={cfg.tolerance}")
+                raise ValueError(f"Got {metric_name} of {metric_value}, which was higher than tolerance={tolerance}")
 
             logging.info(f'Got {metric_name} of {metric_value}. Tolerance was {tolerance}')
         else:
