@@ -21,7 +21,7 @@ class parameter_store():
     def get_params(self, key, enc=False):
         
         if enc: WithDecryption = True
-        else: WithDecryption = True
+        else: WithDecryption = False
         response = self.ssm.get_parameters(
             Names=[key,],
             WithDecryption=WithDecryption

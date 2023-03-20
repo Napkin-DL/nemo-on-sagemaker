@@ -31,6 +31,8 @@ class ecr_handler():
 
     def register_image_to_ecr(self, strRegionName, strAccountId, strRepositoryName, strTag):
         
+        if not strTag.startswith(":"): strTag = ":" + strTag
+        
         print ("== REGISTER AN IMAGE TO ECR ==")
         processing_repository_uri = "{}.dkr.ecr.{}.{}/{}".format(strAccountId, strRegionName, self.strUriSuffix, strRepositoryName + strTag)
         print (f'  processing_repository_uri: {processing_repository_uri}')

@@ -60,6 +60,14 @@ class s3_handler():
             logging.error(e)
             print (f"ERROR: {e}")
             return False
+    
+    def download_obj(self, source_bucket, source_obj, target_file):
+        
+        '''
+        Copy S3 to Locl
+        '''
+        
+        self.client.download_file(source_bucket, source_obj, target_file)
         
     def upload_dir(self, source_dir, target_bucket, target_dir):
         
