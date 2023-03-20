@@ -167,8 +167,6 @@ class sm_pipeline():
         self.proc_prefix = "/opt/ml/processing"        
         self.input_data_path = self.pipeline_config.get_value("INPUT", "input_data_s3_uri") 
         
-        self.experiment_name = ''.join([self.base_job_prefix, "nemo-asr-exp"])
-    
     def create_trial(self, experiment_name):
         
         create_date = strftime("%m%d-%H%M%s")
@@ -357,8 +355,8 @@ class sm_pipeline():
             enable_sagemaker_metrics=True,
             max_run=1*60*60,
         )
-        sm_experiment = self.create_experiment(self.experiment_name)
-        job_name = self.create_trial(self.experiment_name)
+        sm_experiment = self.create_experiment(self.base_job_prefix + self.pipeline_config.get_value("TRAINING", "experiment_name"))
+        job_name = self.create_trial(self.base_job_prefix + self.pipeline_config.get_value("TRAINING", "experiment_name"))
 
         step_training_args = self.estimator.fit(
             inputs={
@@ -409,8 +407,8 @@ class sm_pipeline():
             base_job_name=f"{self.base_job_prefix}/evaluation", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
         )
         
-        sm_experiment = self.create_experiment(self.experiment_name)
-        job_name = self.create_trial(self.experiment_name)
+        sm_experiment = self.create_experiment(self.base_job_prefix + self.pipeline_config.get_value("EVALUATION", "experiment_name"))
+        job_name = self.create_trial(self.base_job_prefix + self.pipeline_config.get_value("EVALUATION", "experiment_name"))
         
         self.evaluation_report = PropertyFile(
             name="EvaluationReport",

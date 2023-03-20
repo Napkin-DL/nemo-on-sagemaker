@@ -10,10 +10,10 @@ class config_handler():
     
     def __init__(self, strConfigPath="config.ini"):
         
-        strFilePath = path.dirname(path.abspath(__file__)) # current directory
-        print ("strFilePath", strFilePath)
+        self.strFilePath = path.dirname(path.abspath(__file__)) # current directory
+        print ("strFilePath", self.strFilePath)
         self.parser = ConfigParser(interpolation=ExtendedInterpolation())
-        self.parser.read(os.path.join(strFilePath, strConfigPath))
+        self.parser.read(os.path.join(self.strFilePath, strConfigPath))
         self.get_all_info()
         
     def get_all_info(self, ):
@@ -46,6 +46,10 @@ class config_handler():
     
     def member_key_check(self, strSection, strOption):
         return self.parser.has_option(strSection, strOption)
+    
+    def write_value(self, ):
+        with open(self.strFilePath, "w") as fp:
+            self.parser.write(fp)
 
 if __name__ == "__main__":
     
