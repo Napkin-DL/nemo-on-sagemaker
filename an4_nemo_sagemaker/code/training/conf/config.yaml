@@ -167,7 +167,7 @@ exp_manager:
     mode: min
     save_top_k: 5
     always_save_nemo: true
-  resume_if_exists: false
+  resume_if_exists: true
   resume_ignore_no_checkpoint: true
   create_wandb_logger: false
   wandb_logger_kwargs:
