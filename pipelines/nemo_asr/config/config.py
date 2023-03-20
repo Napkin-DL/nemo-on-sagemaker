@@ -12,8 +12,9 @@ class config_handler():
         
         self.strFilePath = path.dirname(path.abspath(__file__)) # current directory
         print ("strFilePath", self.strFilePath)
+        self.config_file_path = os.path.join(self.strFilePath, strConfigPath)
         self.parser = ConfigParser(interpolation=ExtendedInterpolation())
-        self.parser.read(os.path.join(self.strFilePath, strConfigPath))
+        self.parser.read(self.config_file_path)
         self.get_all_info()
         
     def get_all_info(self, ):
@@ -48,7 +49,7 @@ class config_handler():
         return self.parser.has_option(strSection, strOption)
     
     def write_value(self, ):
-        with open(self.strFilePath, "w") as fp:
+        with open(self.config_file_path, "w") as fp:
             self.parser.write(fp)
 
 if __name__ == "__main__":
