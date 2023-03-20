@@ -127,7 +127,8 @@ class sm_pipeline():
     
     def __init__(self, region, sagemaker_project_arn, role, default_bucket, \
                  model_package_group_name, base_job_prefix, \
-                 input_data_path):
+                 #input_data_path
+                ):
         
         self.pipeline_config = config_handler(strConfigPath="config-pipeline.ini")
         
@@ -159,7 +160,7 @@ class sm_pipeline():
         # )
         
         self.proc_prefix = "/opt/ml/processing"        
-        self.input_data_path = input_data_path
+        self.input_data_path = self.pipeline_config.get_value("INPUT", "input_data_s3_uri") 
         
         self.experiment_name = ''.join([self.base_job_prefix, "nemo-asr-exp"])
     
@@ -547,19 +548,9 @@ class sm_pipeline():
 
         return pipeline
         
-        
-      
-        
-
-
-
-
-
-
-
 def get_pipeline(
     region,
-    input_data_path,
+    #input_data_path,
     sagemaker_project_arn=None,
     role=None,
     default_bucket=None,
@@ -584,7 +575,8 @@ def get_pipeline(
         default_bucket=default_bucket,
         model_package_group_name=model_package_group_name,
         base_job_prefix=base_job_prefix,
-        input_data_path=input_data_path)
+        #input_data_path=input_data_path
+    )
     
     return nemo_asr_pipeline.get_pipeline()
     
