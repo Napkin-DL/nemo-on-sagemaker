@@ -126,8 +126,7 @@ def get_pipeline_custom_tags(new_tags, region, sagemaker_project_arn=None):
 class sm_pipeline():
     
     def __init__(self, region, sagemaker_project_arn, role, default_bucket, \
-                 model_package_group_name, base_job_prefix, \
-                 #input_data_path
+                 pipeline_name, model_package_group_name, base_job_prefix, \
                 ):
         
         self.pipeline_config = config_handler(strConfigPath="config-pipeline.ini")
@@ -135,15 +134,19 @@ class sm_pipeline():
         
         self.region=region
         self.default_bucket = default_bucket
-        self.base_job_prefix = base_job_prefix
         self.model_package_group_name = model_package_group_name
         self.pm = parameter_store(self.region)
         if role is None: self.role = sagemaker.session.get_execution_role(sagemaker_session)
         else: self.role=role
+        if pipeline_name is None: self.pipeline_name = self.pipeline_config.get_value("PIPELINE", "name")
+        else: self.pipeline_name = pipeline_name
+        if base_job_prefix is None: self.base_job_prefix = self.pipeline_config.get_value("COMMON", "base_job_prefix")
+        else: self.base_job_prefix = base_job_prefix
+        
         
         self.sagemaker_session = get_session(self.region, default_bucket)
         self.pipeline_session = get_pipeline_session(region, default_bucket)
-        self.pipeline_name = self.pipeline_config.get_value("PIPELINE", "name") #pipeline_name        
+        
         self.cache_config = CacheConfig(
             enable_caching=self.pipeline_config.get_value("PIPELINE", "enable_caching", dtype="boolean"),
             expire_after=self.pipeline_config.get_value("PIPELINE", "expire_after")
@@ -153,7 +156,9 @@ class sm_pipeline():
         self.pipeline_config.set_value("TRAINING", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
         self.pipeline_config.set_value("EVALUATION", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
         
-        self.model_approval_status ="PendingManualApproval"
+        #self.model_approval_status = self.pipeline_config.get_value("MODEL_REGISTER", "model_approval_status_default") #"PendingManualApproval"
+        
+        
         # self.model_approval_status = ParameterString(
         #     name="ModelApprovalStatus",
         #     default_value="PendingManualApproval"
@@ -500,7 +505,7 @@ class sm_pipeline():
                     values=[
                         self.evaluation_process.properties.ProcessingOutputConfig.Outputs["evaluation-metrics"].S3Output.S3Uri,
                         #print (self.evaluation_process.arguments.items())로 확인가능
-                        "evaluation-metrics.json"
+                        "evaluation.json"
                     ],
                 ),
                 content_type="application/json")
@@ -550,10 +555,10 @@ class sm_pipeline():
         
 def get_pipeline(
     region,
-    #input_data_path,
     sagemaker_project_arn=None,
     role=None,
     default_bucket=None,
+    pipeline_name=None,
     model_package_group_name="AbalonePackageGroup",
     base_job_prefix="Abalone",
 ):
@@ -573,9 +578,9 @@ def get_pipeline(
         sagemaker_project_arn=sagemaker_project_arn,
         role=role,
         default_bucket=default_bucket,
+        pipeline_name=pipeline_name,
         model_package_group_name=model_package_group_name,
-        base_job_prefix=base_job_prefix,
-        #input_data_path=input_data_path
+        base_job_prefix=base_job_prefix
     )
     
     return nemo_asr_pipeline.get_pipeline()
