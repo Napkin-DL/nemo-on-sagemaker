@@ -60,6 +60,7 @@ from sagemaker.workflow.retry import StepRetryPolicy, StepExceptionTypeEnum, Sag
 from sagemaker.workflow.step_collections import RegisterModel
 from sagemaker.pytorch.model import PyTorchModel
 from omegaconf import OmegaConf
+import shutil
 
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -316,6 +317,15 @@ class sm_pipeline():
         print ("   \nArgs: ", self.preprocessing_process_2.arguments.items())
     
     
+    def _find_nemo_ckpt(self, model_dir):
+        checkpoint_path = None
+        for (root, dirs, files) in os.walk(model_dir):
+            if len(files) > 0:
+                for file_name in files:
+                    if file_name.endswith('.nemo'):
+                        checkpoint_path = root + '/' + file_name
+        return checkpoint_path
+
     def _get_model_data(self, ):
         
         sm_client = boto3.client('sagemaker')
@@ -329,48 +339,81 @@ class sm_pipeline():
                 break
         
         if model_arn is None: return None
-        
         else:
+            
+            import tarfile
+            from utils.s3 import s3_handler
+            
+            s3 = s3_handler()
+            
             response = sm_client.describe_model_package(ModelPackageName=model_arn)
             model_data_url = response['InferenceSpecification']["Containers"][0]["ModelDataUrl"]
-            return model_data_url
+            #return model_data_url
             
+            print ("model_data_url", model_data_url)
             
-        def _step_training(self, ):
+            os.makedirs("./tmp", exist_ok=True)
+            s3.download_obj(
+                source_bucket=model_data_url.split("/", 3)[2],
+                source_obj=model_data_url.split("/", 3)[3],
+                target_file="./tmp/model.tar.gz"
+            )
+            
+            model_path = "./tmp/model.tar.gz"
+            model_dir = './tmp/trained_model'
+            with tarfile.open(model_path) as tar:
+                tar.extractall(path=model_dir)
+
+            print("Loading nemo model.")
+            checkpoint_path = self._find_nemo_ckpt(model_dir)
+            print(f"checkpoint_path : {checkpoint_path}")
+            
+            pretrained_model_s3_path = s3.upload_file(
+                source_file=checkpoint_path,
+                target_bucket=self.pm.get_params(key="-".join([self.base_job_prefix, 'BUCKET'])),
+                target_obj=os.path.join(
+                    self.pipeline_name,
+                    "training",
+                    "pre-trained",
+                    os.path.basename(checkpoint_path)
+                )
+            )
+            if os.path.isdir("./tmp"): shutil.rmtree("./tmp")            
+            print ("pretrained_model_s3_path", pretrained_model_s3_path)
+            return pretrained_model_s3_path
+
+    def _step_training(self, ):
         
         
+        config_path = os.path.join("./code", "conf", "config.yaml")
         ## config modification for retraining
         if self.pm.get_params(key="-".join([self.base_job_prefix, "RETRAIN"])) == "True":
             
+            pretrained_model_data_url = self._get_model_data()
             
-            model_data_url = self._get_model_data()
-            if model_data_url in None: print ("No approved model")
+            if pretrained_model_data_url is None: print ("No approved model")
             else:
-                
-                '''
-                S3에서 데이터가져와서
-                압축풀고
-                nemo 파일 찾아서
-                그걸 다시 업로드 하기
-                
-                깃은 뭐지?
-                '''
-                
-                config_path = os.path.join("./code", "conf", "config.yaml")
                 conf = OmegaConf.load(config_path)
-                if resume == False:
-                    # resume flags if crashes occur
-                    conf.exp_manager.resume_if_exists=False 
-                    conf.exp_manager.resume_ignore_no_checkpoint=False
-                    conf.init_from_nemo_model = None
-
-                else:
-                    # resume flags if crashes occur
-                    conf.exp_manager.resume_if_exists=True
-                    conf.exp_manager.resume_ignore_no_checkpoint=True
-                    # the pre-trained model we want to fine-tune
-                    conf.init_from_nemo_model = "/opt/ml/input/data/pretrained/블라블라블라.nemo"
+                # resume flags if crashes occur
+                conf.exp_manager.resume_if_exists=True
+                conf.exp_manager.resume_ignore_no_checkpoint=True
+                # the pre-trained model we want to fine-tune
+                conf.init_from_nemo_model = f"/opt/ml/input/data/pretrained/{os.path.basename(pretrained_model_data_url)}" #"/opt/ml/input/data/pretrained/블라블라블라.nemo"
                 OmegaConf.save(conf, config_path)
+                
+                pretrain_s3_path = pretrained_model_data_url
+                self.pm.put_params(key="-".join([self.base_job_prefix, "RETRAIN"]), value=False, overwrite=True)
+        else:
+            
+            conf = OmegaConf.load(config_path)
+            conf.exp_manager.resume_if_exists=False 
+            conf.exp_manager.resume_ignore_no_checkpoint=False
+            conf.init_from_nemo_model = None
+            OmegaConf.save(conf, config_path)
+
+            pretrain_s3_path = self.pm.get_params(key=self.base_job_prefix + "-PRETRAINED-WEIGHT")
+        
+        print ("pretrain_s3_path", pretrain_s3_path)
         
         num_re = "([0-9\\.]+)(e-?[[01][0-9])?"
         
@@ -421,7 +464,7 @@ class sm_pipeline():
             inputs={
                 "training":self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
                 "testing":self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
-                "pretrained": self.pm.get_params(key=self.base_job_prefix + "-PRETRAINED-WEIGHT"),
+                "pretrained": pretrain_s3_path, #self.pm.get_params(key=self.base_job_prefix + "-PRETRAINED-WEIGHT"),
             }, 
             job_name=job_name,
             experiment_config={
@@ -430,11 +473,16 @@ class sm_pipeline():
             },
             logs="All",
         )
-
+        
+        
+        cache_config = CacheConfig(
+            enable_caching=False
+        )    
+        
         self.training_process = TrainingStep(
             name="TrainingProcess",
             step_args=step_training_args,
-            cache_config=self.cache_config,
+            cache_config=cache_config,
             depends_on=[self.preprocessing_process, self.preprocessing_process_2],
             retry_policies=[                
                 # retry when resource limit quota gets exceeded
@@ -447,6 +495,8 @@ class sm_pipeline():
             ]
         )
         
+        
+            
         print ("  \n== Training Step ==")
         print ("   \nArgs: ", self.training_process.arguments.items())
         
@@ -572,7 +622,13 @@ class sm_pipeline():
         model = PyTorchModel(
             entry_point="predictor.py",
             source_dir="./code/",
-            #code_location=code_location,
+            code_location=os.path.join(
+                "s3://",
+                self.pm.get_params(key="-".join([self.base_job_prefix, 'BUCKET'])),
+                self.pipeline_name,
+                "inference",
+                "model"
+            ),
             model_data=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
             role=self.role,
             image_uri=self.pm.get_params(key="-".join([self.base_job_prefix, "IMAGE-URI"])),

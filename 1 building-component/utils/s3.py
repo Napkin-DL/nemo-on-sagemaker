@@ -74,6 +74,31 @@ class s3_handler():
         inputs = S3Uploader.upload(source_dir, "s3://{}/{}".format(target_bucket, target_dir))
         
         print (f"Upload:[{source_dir}] was uploaded to [{inputs}]successfully")
+        
+    def upload_file(self, source_file, target_bucket, target_obj=None):
+        """Upload a file to an S3 bucket
+
+        :param file_name: File to upload
+        :param bucket: Bucket to upload to
+        :param object_name: S3 object name. If not specified then file_name is used
+        :return: True if file was uploaded, else False
+        """
+
+        # If S3 object_name was not specified, use file_name
+        if target_obj is None:
+            target_obj = os.path.basename(source_file)
+
+        # Upload the file
+        #s3_client = boto3.client('s3')
+        try:
+            response = self.client.upload_file(source_file, target_bucket, target_obj)
+        except ClientError as e:
+            logging.error(e)
+            return False
+        
+        obj_s3_path = f"s3://{target_bucket}/{target_obj}"
+        
+        return obj_s3_path
     
     def delete_bucket(self, bucket_name):
         
