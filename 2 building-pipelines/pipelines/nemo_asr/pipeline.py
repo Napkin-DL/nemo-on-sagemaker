@@ -494,8 +494,6 @@ class sm_pipeline():
                 ),
             ]
         )
-        
-        
             
         print ("  \n== Training Step ==")
         print ("   \nArgs: ", self.training_process.arguments.items())
