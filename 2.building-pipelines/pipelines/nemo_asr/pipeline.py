@@ -482,17 +482,12 @@ class sm_pipeline():
             },
             logs="All",
         )
-        
-        
-        cache_config = CacheConfig(
-            enable_caching=False
-        )
-        
+
         
         self.training_process = TrainingStep(
             name="TrainingProcess",
             step_args=step_training_args,
-            cache_config=cache_config,
+            cache_config=self.cache_config,
             depends_on=[self.preprocessing_process, self.preprocessing_process_2],
             retry_policies=[                
                 # retry when resource limit quota gets exceeded
@@ -592,7 +587,7 @@ class sm_pipeline():
         self.evaluation_process = ProcessingStep(
             name="EvaluationProcess", ## Processing job이름
             step_args=step_args,
-            depends_on=[self.training_process],
+            # depends_on=[self.training_process],
             property_files=[self.evaluation_report],
             cache_config=self.cache_config,
             retry_policies=[                
@@ -627,8 +622,9 @@ class sm_pipeline():
                 content_type="application/json"
             )
         )
-        
-        model = PyTorchModel(
+        from sagemaker.model import Model
+        # model = PyTorchModel(
+        model = Model(
             entry_point="predictor.py",
             source_dir="./code/",
             code_location=os.path.join(
@@ -640,14 +636,14 @@ class sm_pipeline():
             ),
             model_data=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
             role=self.role,
-            image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])),
-            framework_version="1.13.1",
+            image_uri=self.pm.get_params(key="-".join([self.prefix, "INF-IMAGE-URI"])),
+            # framework_version="1.13.1",
             sagemaker_session=self.pipeline_session,
         )
         
         step_args = model.register(
-            content_types=["text/csv"],
-            response_types=["text/csv"],
+            content_types=["file-path/raw-bytes", "text/csv"],
+            response_types=["application/json"],
             inference_instances=["ml.g4dn.xlarge"],
             transform_instances=["ml.g4dn.xlarge"],
             model_package_group_name=self.model_package_group_name,
@@ -658,24 +654,26 @@ class sm_pipeline():
         self.register_process = ModelStep(
             name="ModelRegisterProcess",
             step_args=step_args,
-            depends_on=[self.evaluation_process]
+            # depends_on=[self.evaluation_process]
         )
-                                 
-        # self.register_process = RegisterModel(
-        #     name="ModelRegisterProcess", ## Processing job이름
-        #     estimator=self.estimator,
-        #     image_uri=self.training_process.properties.AlgorithmSpecification.TrainingImage, 
-        #     model_data=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
-        #     content_types=["text/csv"],
-        #     response_types=["text/csv"],
-        #     inference_instances=self.pipeline_config.get_value("MODEL_REGISTER", "inference_instances", dtype="list"),
-        #     transform_instances=self.pipeline_config.get_value("MODEL_REGISTER", "transform_instances", dtype="list"),
-        #     model_package_group_name=self.model_package_group_name,
-        #     approval_status=self.pipeline_config.get_value("MODEL_REGISTER", "model_approval_status_default"),
-        #     ## “Approved”, “Rejected”, or “PendingManualApproval” (default: “PendingManualApproval”).
-        #     model_metrics=model_metrics,
-        #     depends_on=[self.evaluation_process]
-        # )
+        
+            # condition step for evaluating model quality and branching execution
+        cond_lte = ConditionLessThanOrEqualTo(
+            left=JsonGet(
+                step_name=self.evaluation_process.name,
+                property_file=self.evaluation_report,
+                json_path="metrics.wer.value"
+            ),
+            right=50.0,
+        )
+        
+        self.step_cond = ConditionStep(
+            name="CheckWEREvaluation",
+            conditions=[cond_lte],
+            if_steps=[self.register_process],
+            else_steps=[],
+        )
+
         
         print ("  \n== Registration Step ==")
 
@@ -696,7 +694,7 @@ class sm_pipeline():
             steps=[self.preprocessing_process, self.preprocessing_process_2, \
                    self.training_process, \
                    self.evaluation_process, \
-                   self.register_process, \
+                   self.step_cond, \
             ],
 #             steps=[self.preprocessing_process, self.preprocessing_process_2, \
                   
@@ -712,8 +710,8 @@ def get_pipeline(
     role=None,
     default_bucket=None,
     pipeline_name=None,
-    model_package_group_name="AbalonePackageGroup",
-    base_job_prefix="Abalone",
+    model_package_group_name="NEMOASRPackageGroup",
+    base_job_prefix="NEMOASR",
 ):
     """Gets a SageMaker ML Pipeline instance working with on abalone data.
 
