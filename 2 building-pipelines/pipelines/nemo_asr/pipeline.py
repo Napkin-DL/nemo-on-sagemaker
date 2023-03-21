@@ -574,7 +574,7 @@ class sm_pipeline():
                     source=os.path.join(self.proc_prefix, "evaluation"), #"/opt/ml/processing/evaluation",
                     destination=os.path.join(
                         "s3://",
-                        self.pm.get_params(key="-".join([self.prefix, 'BUCKET'])),
+                        self.default_bucket),
                         self.pipeline_name,
                         "evaluation",
                         "output",
@@ -633,7 +633,7 @@ class sm_pipeline():
             source_dir="./code/",
             code_location=os.path.join(
                 "s3://",
-                self.pm.get_params(key="-".join([self.prefix, 'BUCKET'])),
+                self.default_bucket,
                 self.pipeline_name,
                 "inference",
                 "model"
