@@ -1,6 +1,6 @@
 import os
 import copy
-import pathlib
+import boto3
 import logging
 import json
 import jsonlines # !pip install jsonlines 해주기
@@ -21,6 +21,7 @@ import base64
 import numpy as np
 import pathlib
 from sagemaker.s3 import S3Downloader
+from datetime import datetime
 
 from nemo.collections.asr.metrics.wer import word_error_rate
 from nemo.collections.asr.parts.utils.transcribe_utils import PunctuationCapitalization
@@ -115,6 +116,27 @@ def predict(asr_model, predictions, targets, target_lengths, predictions_lengths
         )
     return references[0], hypotheses[0]
 
+def start_retraining_codepipeline():
+    sm_client = boto3.client('sagemaker')
+    pipeline_client = boto3.client('codepipeline')
+
+    response = sm_client.list_projects(
+      SortBy='CreationTime',
+      SortOrder='Descending'
+    )
+
+    for pjt_list in response['ProjectSummaryList']:
+        if pjt_list['ProjectStatus'] == 'CreateCompleted':
+            ProjectName = pjt_list['ProjectName']
+            break
+
+    des_response = sm_client.describe_project(
+        ProjectName=ProjectName
+    )
+
+    code_pipeline_name = f"sagemaker-{des_response['ProjectName']}-{des_response['ProjectId']}-modelbuild"
+    pipeline_client.start_pipeline_execution(name=code_pipeline_name) 
+    print("Start retraining ........")
     
 def main():
     
@@ -272,11 +294,12 @@ def main():
         
         if tolerance is not None:
             if metric_value > tolerance:
-                raise ValueError(f"Got {metric_name} of {metric_value}, which was higher than tolerance={tolerance}")
-
-            logging.info(f'Got {metric_name} of {metric_value}. Tolerance was {tolerance}')
+                print(f"Got {metric_name} of {metric_value}, which was higher than tolerance={tolerance}")
+                start_retraining_codepipeline()
+                
+            print(f'Got {metric_name} of {metric_value}. Tolerance was {tolerance}')
         else:
-            logging.info(f'Got {metric_name} of {metric_value}')
+            print(f'Got {metric_name} of {metric_value}')
 
         print(f'Dataset WER/CER ' + str(round(100 * wer, 2)) + "%/" + str(round(100 * cer, 2)) + "%")
     
