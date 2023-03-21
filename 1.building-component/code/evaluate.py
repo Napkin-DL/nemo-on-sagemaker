@@ -117,8 +117,9 @@ def predict(asr_model, predictions, targets, target_lengths, predictions_lengths
     return references[0], hypotheses[0]
 
 def start_retraining_codepipeline():
-    sm_client = boto3.client('sagemaker')
-    pipeline_client = boto3.client('codepipeline')
+    region_name = os.environ["region"]
+    sm_client = boto3.client('sagemaker', region_name=region_name)
+    pipeline_client = boto3.client('codepipeline', region_name=region_name)
 
     response = sm_client.list_projects(
       SortBy='CreationTime',
