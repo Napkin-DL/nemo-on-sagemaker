@@ -499,7 +499,7 @@ class sm_pipeline():
                 SageMakerJobStepRetryPolicy(
                     exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
                     expire_after_mins=180,
-                    interval_seconds=600,
+                    interval_seconds=60,
                     backoff_rate=1.0
                 ),
             ]
