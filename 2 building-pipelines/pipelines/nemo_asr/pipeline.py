@@ -138,7 +138,7 @@ class sm_pipeline():
         self.default_bucket = default_bucket
         self.model_package_group_name = model_package_group_name
         self.pm = parameter_store(self.region)
-        if role is None: self.role = sagemaker.session.get_execution_role(sagemaker_session)
+        if role is None: self.role = sagemaker.session.get_execution_role()
         else: self.role=role
         if base_job_prefix is None: self.base_job_prefix = self.pm.get_params(key="PREFIX") #self.pipeline_config.get_value("COMMON", "base_job_prefix")
         else: self.base_job_prefix = base_job_prefix
@@ -370,7 +370,7 @@ class sm_pipeline():
             
             pretrained_model_s3_path = s3.upload_file(
                 source_file=checkpoint_path,
-                target_bucket=self.pm.get_params(key="-".join([self.prefix, 'BUCKET'])),
+                target_bucket=self.default_bucket,
                 target_obj=os.path.join(
                     self.pipeline_name,
                     "training",
@@ -389,6 +389,8 @@ class sm_pipeline():
         ## config modification for retraining
         if self.pm.get_params(key="-".join([self.prefix, "RETRAIN"])) == "True":
             
+            print ("here")
+            
             pretrained_model_data_url = self._get_model_data()
             
             if pretrained_model_data_url is None: print ("No approved model")
@@ -402,8 +404,11 @@ class sm_pipeline():
                 OmegaConf.save(conf, config_path)
                 
                 pretrain_s3_path = pretrained_model_data_url
+                print ("pretrained_model_data_url", pretrain_s3_path)
                 self.pm.put_params(key="-".join([self.prefix, "RETRAIN"]), value=False, overwrite=True)
         else:
+            
+            print ("here2")
             
             conf = OmegaConf.load(config_path)
             conf.exp_manager.resume_if_exists=False 

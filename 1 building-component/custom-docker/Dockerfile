@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -U omegaconf hydra-core librosa sentencepiece youtokentome inflect sox \
  && pip install --no-cache-dir -U braceexpand webdataset editdistance jiwer jsonlines \
  && pip install --no-cache-dir -U pytorch-lightning \ 
- && pip install --no-cache-dir -qq https://github.com/pyannote/pyannote-audio/archive/develop.zip \ 
+ && pip install --no-cache-dir -U https://github.com/pyannote/pyannote-audio/archive/develop.zip \ 
  && pip install --no-cache-dir git+https://github.com/huggingface/transformers \ 
  && pip install --no-cache-dir git+https://github.com/NVIDIA/NeMo.git@main
  

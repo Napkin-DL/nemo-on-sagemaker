@@ -13,6 +13,7 @@ class ecr_handler():
         
         os.chdir(strDockerDir)
         print (os.getcwd())
+        print ("strDockerFile", strDockerFile)
         
         strQuery = "".join(["aws ecr get-login --region ", "'", strRegionName, "' ", "--registry-ids ", "'", strAccountId, "' ", "--no-include-email"])
         
@@ -23,11 +24,8 @@ class ecr_handler():
         
         
         #strQuery = "".join(["docker build -t ", "'", strRepositoryName, "' ", "."])
-        strQuery = "".join(["docker build -f ", strDockerFile " -t ", "'", strRepositoryName, "' ", "."])
+        strQuery = "".join(["docker build -f ", "'", strDockerFile, "' ", "-t ", "'", strRepositoryName, "' ", "."])
         strResponse = os.popen(strQuery).read()
-        
-        docker build -f Dockerfile.inf -t ${fullname} .
-        
         
         print (strResponse)
         

@@ -5,8 +5,10 @@ phases:
     runtime-versions:
       python: 3.8
     commands:
+      - pip install --no-cache-dir --upgrade pip
       - pip install --upgrade --force-reinstall . "awscli>1.20.30"
       - pip install sagemaker-experiments omegaconf
+      
   
   build:
     commands:
