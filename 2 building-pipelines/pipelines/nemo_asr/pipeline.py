@@ -142,6 +142,7 @@ class sm_pipeline():
         else: self.role=role
         if base_job_prefix is None: self.base_job_prefix = self.pm.get_params(key="PREFIX") #self.pipeline_config.get_value("COMMON", "base_job_prefix")
         else: self.base_job_prefix = base_job_prefix
+        self.prefix = self.pm.get_params(key="PREFIX")
         if pipeline_name is None: self.pipeline_name = self.base_job_prefix + "-pipeline" #self.pipeline_config.get_value("PIPELINE", "name")
         else: self.pipeline_name = pipeline_name
         
@@ -169,7 +170,7 @@ class sm_pipeline():
         # )
         
         self.proc_prefix = "/opt/ml/processing"        
-        self.input_data_path = self.pm.get_params(key="-".join([self.base_job_prefix, "S3-DATA-PATH"])) #self.pipeline_config.get_value("INPUT", "input_data_s3_uri") 
+        self.input_data_path = self.pm.get_params(key="-".join([self.prefix, "S3-DATA-PATH"])) #self.pipeline_config.get_value("INPUT", "input_data_s3_uri") 
         
     def create_trial(self, experiment_name):
         
@@ -192,7 +193,7 @@ class sm_pipeline():
         dataset_processor = FrameworkProcessor(
             estimator_cls=PyTorch,
             framework_version=None,
-            image_uri=self.pm.get_params(key="-".join([self.base_job_prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
+            image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
             instance_type="ml.m5.xlarge", #self.pipeline_config.get_value("PREPROCESSING", "instance_type"), #self.processing_instance_type,
             instance_count=1, #self.pipeline_config.get_value("PREPROCESSING", "instance_count", dtype="int"), #self.processing_instance_count,
             role=self.role,
@@ -256,7 +257,7 @@ class sm_pipeline():
         dataset_processor = FrameworkProcessor(
             estimator_cls=PyTorch,
             framework_version=None,
-            image_uri=self.pm.get_params(key="-".join([self.base_job_prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
+            image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("PREPROCESSING", "image_uri"),
             instance_type="ml.m5.xlarge", #self.pipeline_config.get_value("PREPROCESSING", "instance_type"), #self.processing_instance_type,
             instance_count=1, #self.pipeline_config.get_value("PREPROCESSING", "instance_count", dtype="int"), #self.processing_instance_count,
             role=self.role,
@@ -369,7 +370,7 @@ class sm_pipeline():
             
             pretrained_model_s3_path = s3.upload_file(
                 source_file=checkpoint_path,
-                target_bucket=self.pm.get_params(key="-".join([self.base_job_prefix, 'BUCKET'])),
+                target_bucket=self.pm.get_params(key="-".join([self.prefix, 'BUCKET'])),
                 target_obj=os.path.join(
                     self.pipeline_name,
                     "training",
@@ -386,7 +387,7 @@ class sm_pipeline():
         
         config_path = os.path.join("./code", "conf", "config.yaml")
         ## config modification for retraining
-        if self.pm.get_params(key="-".join([self.base_job_prefix, "RETRAIN"])) == "True":
+        if self.pm.get_params(key="-".join([self.prefix, "RETRAIN"])) == "True":
             
             pretrained_model_data_url = self._get_model_data()
             
@@ -401,7 +402,7 @@ class sm_pipeline():
                 OmegaConf.save(conf, config_path)
                 
                 pretrain_s3_path = pretrained_model_data_url
-                self.pm.put_params(key="-".join([self.base_job_prefix, "RETRAIN"]), value=False, overwrite=True)
+                self.pm.put_params(key="-".join([self.prefix, "RETRAIN"]), value=False, overwrite=True)
         else:
             
             conf = OmegaConf.load(config_path)
@@ -410,7 +411,7 @@ class sm_pipeline():
             conf.init_from_nemo_model = None
             OmegaConf.save(conf, config_path)
 
-            pretrain_s3_path = self.pm.get_params(key=self.base_job_prefix + "-PRETRAINED-WEIGHT")
+            pretrain_s3_path = self.pm.get_params(key=self.prefix + "-PRETRAINED-WEIGHT")
         
         print ("pretrain_s3_path", pretrain_s3_path)
         
@@ -422,7 +423,7 @@ class sm_pipeline():
             role=self.role,
             instance_type="ml.p3.2xlarge", #self.pipeline_config.get_value("TRAINING", "instance_type"),
             instance_count=1, #self.pipeline_config.get_value("TRAINING", "instance_count", dtype="int"), 
-            image_uri=self.pm.get_params(key="-".join([self.base_job_prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("TRAINING", "image_uri"),
+            image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("TRAINING", "image_uri"),
             volume_size=512,
             output_path=Join(
                 on="/",
@@ -461,8 +462,12 @@ class sm_pipeline():
 
         step_training_args = self.estimator.fit(
             inputs={
-                "training":self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
-                "testing":self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
+                "training": TrainingInput(
+                    self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
+                ),
+                "testing": TrainingInput(
+                    self.preprocessing_process.properties.ProcessingOutputConfig.Outputs["output-data"].S3Output.S3Uri,
+                ),
                 "pretrained": pretrain_s3_path, #self.pm.get_params(key=self.base_job_prefix + "-PRETRAINED-WEIGHT"),
             }, 
             job_name=job_name,
@@ -476,7 +481,8 @@ class sm_pipeline():
         
         cache_config = CacheConfig(
             enable_caching=False
-        )    
+        )
+        
         
         self.training_process = TrainingStep(
             name="TrainingProcess",
@@ -503,7 +509,7 @@ class sm_pipeline():
             estimator_cls=PyTorch,
             framework_version=None,
             role=self.role, 
-            image_uri=self.pm.get_params(key="-".join([self.base_job_prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("EVALUATION", "image_uri"),
+            image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("EVALUATION", "image_uri"),
             instance_type="ml.g4dn.xlarge", #self.pipeline_config.get_value("EVALUATION", "instance_type"),
             instance_count=1, #self.pipeline_config.get_value("EVALUATION", "instance_count", dtype="int"),
             env={
@@ -563,7 +569,7 @@ class sm_pipeline():
                     source=os.path.join(self.proc_prefix, "evaluation"), #"/opt/ml/processing/evaluation",
                     destination=os.path.join(
                         "s3://",
-                        self.pm.get_params(key="-".join([self.base_job_prefix, 'BUCKET'])),
+                        self.pm.get_params(key="-".join([self.prefix, 'BUCKET'])),
                         self.pipeline_name,
                         "evaluation",
                         "output",
@@ -601,7 +607,7 @@ class sm_pipeline():
     def _step_model_registration(self, ):
       
         #self.model_package_group_name = ''.join([self.prefix, self.model_name])
-        self.pm.put_params(key=self.base_job_prefix + "MODEL-GROUP-NAME", value=self.model_package_group_name, overwrite=True)
+        self.pm.put_params(key=self.prefix + "MODEL-GROUP-NAME", value=self.model_package_group_name, overwrite=True)
                                                                               
         model_metrics = ModelMetrics(
             model_statistics=MetricsSource(
@@ -613,7 +619,8 @@ class sm_pipeline():
                         "evaluation.json"
                     ],
                 ),
-                content_type="application/json")
+                content_type="application/json"
+            )
         )
         
         model = PyTorchModel(
@@ -621,14 +628,15 @@ class sm_pipeline():
             source_dir="./code/",
             code_location=os.path.join(
                 "s3://",
-                self.pm.get_params(key="-".join([self.base_job_prefix, 'BUCKET'])),
+                self.pm.get_params(key="-".join([self.prefix, 'BUCKET'])),
                 self.pipeline_name,
                 "inference",
                 "model"
             ),
             model_data=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
             role=self.role,
-            image_uri=self.pm.get_params(key="-".join([self.base_job_prefix, "IMAGE-URI"])),
+            image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])),
+            framework_version="1.13.1",
             sagemaker_session=self.pipeline_session,
         )
         
