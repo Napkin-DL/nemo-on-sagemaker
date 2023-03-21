@@ -622,9 +622,8 @@ class sm_pipeline():
                 content_type="application/json"
             )
         )
-        from sagemaker.model import Model
-        # model = PyTorchModel(
-        model = Model(
+
+        model = PyTorchModel(
             entry_point="predictor.py",
             source_dir="./code/",
             code_location=os.path.join(
@@ -637,7 +636,7 @@ class sm_pipeline():
             model_data=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
             role=self.role,
             image_uri=self.pm.get_params(key="-".join([self.prefix, "INF-IMAGE-URI"])),
-            # framework_version="1.13.1",
+            framework_version="1.13.1",
             sagemaker_session=self.pipeline_session,
         )
         
