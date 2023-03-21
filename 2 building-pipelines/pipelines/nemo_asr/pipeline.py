@@ -132,8 +132,7 @@ class sm_pipeline():
                  pipeline_name, model_package_group_name, base_job_prefix, \
                 ):
         
-        self.pipeline_config = config_handler(strConfigPath="config-pipeline.ini")
-        
+        #self.pipeline_config = config_handler(strConfigPath="config-pipeline.ini")
         
         self.region=region
         self.default_bucket = default_bucket
@@ -457,8 +456,8 @@ class sm_pipeline():
             enable_sagemaker_metrics=True,
             max_run=1*60*60,
         )
-        sm_experiment = self.create_experiment(self.base_job_prefix + self.pipeline_config.get_value("TRAINING", "experiment_name"))
-        job_name = self.create_trial(self.base_job_prefix + self.pipeline_config.get_value("TRAINING", "experiment_name"))
+        sm_experiment = self.base_job_prefix + "train-exp" #self.create_experiment(self.base_job_prefix + self.pipeline_config.get_value("TRAINING", "experiment_name"))
+        job_name = self.base_job_prefix + "train-exp" #self.create_trial(self.base_job_prefix + self.pipeline_config.get_value("TRAINING", "experiment_name"))
 
         step_training_args = self.estimator.fit(
             inputs={
@@ -515,8 +514,8 @@ class sm_pipeline():
             base_job_name=f"{self.base_job_prefix}/evaluation", # bucket에 보이는 이름 (pipeline으로 묶으면 pipeline에서 정의한 이름으로 bucket에 보임)
         )
         
-        sm_experiment = self.create_experiment(self.base_job_prefix + self.pipeline_config.get_value("EVALUATION", "experiment_name"))
-        job_name = self.create_trial(self.base_job_prefix + self.pipeline_config.get_value("EVALUATION", "experiment_name"))
+        sm_experiment = self.base_job_prefix + "eval-exp" #self.create_experiment(self.base_job_prefix + self.pipeline_config.get_value("EVALUATION", "experiment_name"))
+        job_name = self.base_job_prefix + "eval-exp" #self.create_trial(self.base_job_prefix + self.pipeline_config.get_value("EVALUATION", "experiment_name"))
         
         self.evaluation_report = PropertyFile(
             name="EvaluationReport",

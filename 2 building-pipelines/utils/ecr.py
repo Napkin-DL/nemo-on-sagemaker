@@ -6,7 +6,7 @@ class ecr_handler():
         
         self.strUriSuffix = "amazonaws.com"
         
-    def build_docker(self, strDockerDir, strDockerFile, strRepositoryName, strRegionName, strAccountId):
+    def build_docker(self, strDockerDir, strRepositoryName, strRegionName, strAccountId):
         
         strCurrentWD = os.getcwd()
         print (os.getcwd())
@@ -22,13 +22,8 @@ class ecr_handler():
         print (strResponse)
         
         
-        #strQuery = "".join(["docker build -t ", "'", strRepositoryName, "' ", "."])
-        strQuery = "".join(["docker build -f ", strDockerFile " -t ", "'", strRepositoryName, "' ", "."])
+        strQuery = "".join(["docker build -t ", "'", strRepositoryName, "' ", "."])
         strResponse = os.popen(strQuery).read()
-        
-        docker build -f Dockerfile.inf -t ${fullname} .
-        
-        
         print (strResponse)
         
         os.chdir(strCurrentWD)
