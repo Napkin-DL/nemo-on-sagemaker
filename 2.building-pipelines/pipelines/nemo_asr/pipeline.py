@@ -584,7 +584,7 @@ class sm_pipeline():
             # depends_on=[self.training_process],
             property_files=[self.evaluation_report],
             cache_config=self.cache_config,
-            #retry_policies=self.retry_policies
+            retry_policies=self.retry_policies
         )
         
         print ("  \n== Evaluation Step ==")
