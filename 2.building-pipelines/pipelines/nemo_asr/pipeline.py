@@ -156,6 +156,23 @@ class sm_pipeline():
             expire_after="T48H" #self.pipeline_config.get_value("PIPELINE", "expire_after")
         )    
         
+        self.git_config = {
+            'repo': f'https://{self.pm.get_params(key="-".join([self.prefix, "CODE_REPO"]))}', ### <== 5. git repository 위치 수정
+            'branch': 'main',
+            'username': self.pm.get_params(key="-".join([self.prefix, "CODECOMMIT-USERNAME"]), enc=True),
+            'password': self.pm.get_params(key="-".join([self.prefix, "CODECOMMIT-PWD"]), enc=True)
+        }
+        
+        self.retry_policies=[                
+            # retry when resource limit quota gets exceeded
+            SageMakerJobStepRetryPolicy(
+                exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
+                expire_after_mins=180,
+                interval_seconds=60,
+                backoff_rate=1.0
+            ),
+        ]
+        
         #self.pipeline_config.set_value("PREPROCESSING", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
         #self.pipeline_config.set_value("TRAINING", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
         #self.pipeline_config.set_value("EVALUATION", "image_uri", self.pm.get_params(key=''.join([self.base_job_prefix, "IMAGE-URI"])))
@@ -205,6 +222,7 @@ class sm_pipeline():
             job_name="preprocessing", ## 이걸 넣어야 캐시가 작동함, 안그러면 프로세서의 base_job_name 이름뒤에 날짜 시간이 붙어서 캐시 동작 안함
             code='./preprocessing.py', #소스 디렉토리 안에서 파일 path
             source_dir="./code/", #현재 파일에서 소스 디렉토리 상대경로 # add processing.py and requirements.txt here
+            git_config=self.git_config,
             inputs=[
                 ProcessingInput(
                     input_name="input-data",
@@ -238,15 +256,7 @@ class sm_pipeline():
             name="PreprocessingProcess", ## Processing job이름
             step_args=step_args,
             cache_config=self.cache_config,
-            retry_policies=[                
-                # retry when resource limit quota gets exceeded
-                SageMakerJobStepRetryPolicy(
-                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
-                    expire_after_mins=180,
-                    interval_seconds=600,
-                    backoff_rate=1.0
-                ),
-            ]
+            retry_policies=self.retry_policies
         )
         
         print ("  \n== Preprocessing Step ==")
@@ -269,6 +279,7 @@ class sm_pipeline():
             job_name="preprocessing-2", ## 이걸 넣어야 캐시가 작동함, 안그러면 프로세서의 base_job_name 이름뒤에 날짜 시간이 붙어서 캐시 동작 안함
             code='./preprocessing.py', #소스 디렉토리 안에서 파일 path
             source_dir="./code/", #현재 파일에서 소스 디렉토리 상대경로 # add processing.py and requirements.txt here
+            git_config=self.git_config,
             inputs=[
                 ProcessingInput(
                     input_name="input-data",
@@ -302,20 +313,11 @@ class sm_pipeline():
             name="PreprocessingProcess-2", ## Processing job이름
             step_args=step_args,
             cache_config=self.cache_config,
-            retry_policies=[                
-                # retry when resource limit quota gets exceeded
-                SageMakerJobStepRetryPolicy(
-                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
-                    expire_after_mins=180,
-                    interval_seconds=600,
-                    backoff_rate=1.0
-                ),
-            ]
+            retry_policies=self.retry_policies
         )
         
         print ("  \n== Preprocessing Step 2 ==")
         print ("   \nArgs: ", self.preprocessing_process_2.arguments.items())
-    
     
     def _find_nemo_ckpt(self, model_dir):
         checkpoint_path = None
@@ -389,8 +391,6 @@ class sm_pipeline():
         ## config modification for retraining
         if self.pm.get_params(key="-".join([self.prefix, "RETRAIN"])) == "True":
             
-            print ("here")
-            
             pretrained_model_data_url = self._get_model_data()
             
             if pretrained_model_data_url is None: print ("No approved model")
@@ -425,8 +425,9 @@ class sm_pipeline():
         self.estimator = PyTorch(
             entry_point="speech_to_text_ctc.py", # the script we want to run
             source_dir="./code/", # where our conf/script is
+            git_config=self.git_config,
             role=self.role,
-            instance_type="ml.p3.2xlarge", #self.pipeline_config.get_value("TRAINING", "instance_type"),
+            instance_type="ml.g4dn.8xlarge", #ml.p3.2xlarge self.pipeline_config.get_value("TRAINING", "instance_type"),
             instance_count=1, #self.pipeline_config.get_value("TRAINING", "instance_count", dtype="int"), 
             image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("TRAINING", "image_uri"),
             volume_size=512,
@@ -489,15 +490,7 @@ class sm_pipeline():
             step_args=step_training_args,
             cache_config=self.cache_config,
             depends_on=[self.preprocessing_process, self.preprocessing_process_2],
-            retry_policies=[                
-                # retry when resource limit quota gets exceeded
-                SageMakerJobStepRetryPolicy(
-                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
-                    expire_after_mins=180,
-                    interval_seconds=60,
-                    backoff_rate=1.0
-                ),
-            ]
+            retry_policies=self.retry_policies
         )
             
         print ("  \n== Training Step ==")
@@ -510,7 +503,7 @@ class sm_pipeline():
             framework_version=None,
             role=self.role, 
             image_uri=self.pm.get_params(key="-".join([self.prefix, "IMAGE-URI"])), #self.pipeline_config.get_value("EVALUATION", "image_uri"),
-            instance_type="ml.g4dn.xlarge", #self.pipeline_config.get_value("EVALUATION", "instance_type"),
+            instance_type="ml.g4dn.8xlarge", #self.pipeline_config.get_value("EVALUATION", "instance_type"),
             instance_count=1, #self.pipeline_config.get_value("EVALUATION", "instance_count", dtype="int"),
             env={
                 'MANIFEST_PATH': '/opt/ml/input/data/testing/an4/wav', 
@@ -532,6 +525,7 @@ class sm_pipeline():
         step_args = eval_processor.run(
             code="evaluate.py",
             source_dir="./code/",
+            git_config=self.git_config,
             inputs=[
                 ProcessingInput(
                     source=self.training_process.properties.ModelArtifacts.S3ModelArtifacts,
@@ -590,15 +584,7 @@ class sm_pipeline():
             # depends_on=[self.training_process],
             property_files=[self.evaluation_report],
             cache_config=self.cache_config,
-            retry_policies=[                
-                # retry when resource limit quota gets exceeded
-                SageMakerJobStepRetryPolicy(
-                    exception_types=[SageMakerJobExceptionTypeEnum.RESOURCE_LIMIT],
-                    expire_after_mins=180,
-                    interval_seconds=600,
-                    backoff_rate=1.0
-                ),
-            ]
+            #retry_policies=self.retry_policies
         )
         
         print ("  \n== Evaluation Step ==")
@@ -626,6 +612,7 @@ class sm_pipeline():
         model = PyTorchModel(
             entry_point="predictor.py",
             source_dir="./code/",
+            git_config=self.git_config,
             code_location=os.path.join(
                 "s3://",
                 self.default_bucket,
@@ -695,9 +682,8 @@ class sm_pipeline():
                    self.evaluation_process, \
                    self.step_cond, \
             ],
-#             steps=[self.preprocessing_process, self.preprocessing_process_2, \
-                  
-#             ],
+            # steps=[self.preprocessing_process, \
+            # ],
             sagemaker_session=self.pipeline_session
         )
 
